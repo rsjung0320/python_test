@@ -5,7 +5,7 @@ import libs.Crawling_lllpga as CL
 # url = 'https://www.lpga.or.jp/members/info/1000932'
 url = 'https://www.lpga.or.jp/members/info/1000932/2019'
 
-
+#test
 #html = urllib.request.urlopen(url)
 html = requests.get(url).text
 
