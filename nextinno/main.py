@@ -1,6 +1,6 @@
 import requests
 from bs4 import BeautifulSoup as BS
-import Crawling_lllpga as CL
+import libs.Crawling_lllpga as CL
 
 # url = 'https://www.lpga.or.jp/members/info/1000932'
 url = 'https://www.lpga.or.jp/members/info/1000932/2019'
