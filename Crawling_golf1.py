@@ -1,35 +1,3 @@
-# import requests
-# from bs4 import BeautifulSoup as BS
-
-# url = 'http://www.basketball-reference.com/teams/CHO/2017.html'
-
-# #html = urllib.request.urlopen(url)
-# html = requests.get(url).text
-
-# soup = BS(html, 'html.parser')
-
-# placeholders = soup.find_all('div', {'class': 'placeholder'})
-
-# total_tables = 0
-
-# for x in placeholders:
-#     # get elements after placeholder and join in one string
-#     comment = ''.join(x.next_siblings)
-
-#     # parse comment
-#     soup_comment = BS(comment, 'html.parser')
-
-#     # search table in comment
-#     tables = soup_comment.find_all('table')
-
-#     # ... do something with table ...
-
-#     #print(tables)
-
-#     total_tables += len(tables)
-
-# print('total tables:', total_tables)   
-
 import requests
 from bs4 import BeautifulSoup as BS
 
