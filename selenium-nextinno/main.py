@@ -1,7 +1,7 @@
 from selenium import webdriver
 from bs4 import BeautifulSoup as BS
 
-driver = webdriver.Chrome('/Users/jung/development/projects/python/glof-crawling/python_test/selenium-nextinno/chrome-driver/chromedriver75')
+driver = webdriver.Chrome('./selenium-nextinno/chrome-driver/chromedriver')
 driver.implicitly_wait(3)
 driver.get('https://nid.naver.com/nidlogin.login')
 driver.find_element_by_name('id').send_keys('mcthemaxrs')
