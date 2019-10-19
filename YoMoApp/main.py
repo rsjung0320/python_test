@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import time
 import shutil
 import os
@@ -6,157 +8,224 @@ import time
 import datetime
 import sys
 import random
+import psutil
+import numpy as np
+
+# import monroe_exporter
+import json
 
 from pyvirtualdisplay import Display
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
+from selenium.webdriver.support.wait import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException
+from selenium.webdriver.common.by import By
+from subprocess import call
+
+EXPCONFIG = {
+"ytId":"pJ8HFgPKiZE",
+"duration":20,
+"bitrates":"144p:110.139,240p:246.425,360p:262.750,480p:529.500,720p:1036.744,1080p:2793.167"
+}
 
 
-def runBaselineVideo():
+def runVideo():
 
-	#start display	
+	# start display	
 	display = Display(visible=0, size=(1920, 1080)) #display size has to be cutomized 1920, 1080
 	print(time.time(), ' start display')
 	display.start()
 	time.sleep(10)
 
-	bufferFactor = 2
-	source = '/tmp'
+	# get url
+	url = 'https://www.youtube.com/watch?v=' + EXPCONFIG['ytId']
+
+	# set file prefix
 	ts = time.time()
 	st = datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d_%H-%M-%S')
-	url = 'https://www.youtube.com/watch?v=QS7lN7giXXc'
-	#url = 'https://www.youtube.com/watch?v=JOe7Pt4TZPk'
+	prefix = "YT_" + EXPCONFIG['ytId'] + '_' + st
 
-	#start video
+	# define firefox settings
+	caps = DesiredCapabilities().FIREFOX
+	#caps["pageLoadStrategy"] = "normal"  #  complete
+	caps["pageLoadStrategy"] = "none"
+
+
 	try:
 
+		# start firefox
 		print(time.time(), ' start firefox')
-		browser = webdriver.Firefox()
+		browser = webdriver.Firefox(capabilities=caps)
 		time.sleep(10)
 
-		print(time.time(), ' start video')
+		# read in js
+		jsFile = open('/opt/monroe/pluginAsJS.js', 'r')
+		js = jsFile.read()
+		jsFile.close
+
+		# open webpage
+		print(time.time(), ' start video ', EXPCONFIG['ytId'])
 		browser.get(url)
-		duration = browser.execute_script('return document.getElementsByTagName("video")[0].duration;')
-		## document.getElementsByTagName("video")[0].buffered.end(document.getElementsByTagName("video")[0].buffered.length - 1)
-		time.sleep(duration*bufferFactor)
+		browser.get_screenshot_as_file('/monroe/results/screenshot0.png')
 
-		#time.sleep(200)
-
-
+		# inject js
+		browser.execute_script(js)
+		duration = EXPCONFIG['duration']
+		time.sleep(duration)
+		
+		# get infos from js and write to file
+		print("video playback ended")
+		out = browser.execute_script('return document.getElementById("outC").innerHTML;')
+		outE = browser.execute_script('return document.getElementById("outE").innerHTML;')
+		with open('/monroe/results/' + prefix + '_buffer.txt', 'w') as f:
+			f.write(out)
+		with open('/monroe/results/' + prefix + '_events.txt', 'w') as f:
+			f.write(outE.encode("UTF-8"))
+			
+		# close browser
 		browser.close()
 		print(time.time(), ' finished firefox')
 
-		# #move yomo output
-		# destination = '/monroe/results/' + 'base'
-		# if not os.path.exists(destination):
-		# 	os.makedirs(destination)
-		# 	print('created dir' + destination)
-		# print('set destination of output to ' + destination)
-
-		# files = os.listdir(source)
-		# for f in files:
-		# 	if (f.startswith("yomo_output_")):
-		# 		shutil.move(source + '/' + f, destination)
-		# print('moved plugin output to ' + destination)
+		
 	except Exception as e:
 		print(time.time(), ' exception thrown')
 		print(e)
-		st = datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S')
+		ts = time.time()
+		st = datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d_%H-%M-%S')
 		print(st)
-		
-		#move yomo output
-		destination = '/monroe/results/' + 'base'
-		if not os.path.exists(destination):
-			os.makedirs(destination)
-			print('created dir' + destination)
-		print('set destination of output to ' + destination)
-
-		files = os.listdir(source)
-		for f in files:
-			if (f.startswith("yomo_output_")):
-				shutil.move(source + '/' + f, destination)
-		print('moved plugin output to ' + destination)
-
+	
+	# stop display
 	display.stop()
 	print(time.time(), 'display stopped')
-	return;
-
-
-def runRandomVideo():
-
-	#start display	
-	display = Display(visible=0, size=(1920, 1080)) #display size has to be cutomized
-	display.start()
-	print('started display')
-
-	bufferFactor = 2
-	source = '/tmp'
-	ts = time.time()
-	st = datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d_%H-%M-%S')
-
-
-	#get ytid
-	r = random.randint(0,100)
-	lines = []
-	if (r > 60):
-		#random video (40%)
-		print('random int', r ,' --> select video from random list')
-		with open('/opt/monroe/randYTIDs.txt','r') as f:
-		  for line in f:
-		      lines.append(line.rstrip('\n'))
-	else:
-		#video from core set (60%)
-		print('random int', r ,' --> select video from core set')
-		with open('/opt/monroe/coreSet.txt','r') as f:
-		  for line in f:
-		      lines.append(line.rstrip('\n'))
-	#get random id from list
-	randInt = random.randint(0,len(lines)-1)
-	print('select video number ', randInt)
-	randVideoId = lines[randInt]
-	url = 'https://www.youtube.com/watch?v=' + randVideoId
-	print('selected VideoId: ', randVideoId)
 	
+	# calculate some infos
+	bitrates = EXPCONFIG['bitrates'].split(",")
+	with open('/monroe/results/' + prefix + '_outStream.txt', 'w') as f:
+			f.write(getOutput(prefix, bitrates).encode("UTF-8"))
 
-	#start video
-	try:
-		browser = webdriver.Firefox()
-		browser.get(url)
-		duration = browser.execute_script('return document.getElementsByTagName("video")[0].duration;')
-		print('started video ', randVideoId, ' with duration ', duration)
-		time.sleep(duration*bufferFactor)
-		#time.sleep(20)
-		browser.close()
-		print('finished video ', randVideoId, ' with duration ', duration)
-
-		#move yomo output
-		destination = '/monroe/results/' + 'random'
-		if not os.path.exists(destination):
-			os.makedirs(destination)
-			print('created dir' + destination)
-		print('set destination of output to ' + destination)
-
-		files = os.listdir(source)
-		for f in files:
-			if (f.startswith("yomo_output_")):
-				shutil.move(source + '/' + f, destination)
-		print('moved plugin output to ' + destination)
-	except Exception as e:
-		print(e)
-		st = datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S')
-		print(st)
-
-	display.stop()
-	print('display stopped')
 	return;
+
+
+
+# Calculate average, max, min, 25-50-75-90 quantiles of the following: bitrate [KB], buffer [s], number of stalls, duration of stalls
+def getOutput(prefix, bitrates):
+	out = calculateBitrate(prefix, bitrates)+ "," + calculateBuffer(prefix)+ "," + calculateStallings(prefix)
+	return out
+
+def getEvents(prefix):
+	timestamps = []
+	qualities = []
+	with open('/monroe/results/' + prefix + "_events.txt", "r") as filestream:
+		for line in filestream:
+			currentline = line.split("#")
+			if ("quality" in currentline[1]): 
+				timestamps.append(float(currentline[0]))
+				quality = str(currentline[1])
+				quality = quality.split(":")[1]
+				quality = quality.split(" ")[0]
+				qualities.append(quality)
+			if ("ended" in currentline[1]):
+				endtime = float(currentline[0])
+	if 'endtime' not in locals():
+		[times, playtime, buffertime, avPlaytime] = getBuffer(prefix)
+		endtime = times[-1]
+	return [timestamps, qualities, endtime]
+
+def getBuffer(prefix):
+	timestamps = []
+	playtime = []
+	buffertime = []
+	avPlaytime = []
+	isFirstLine = True
+	with open('/monroe/results/' + prefix + "_buffer.txt", "r") as filestream:
+		for line in filestream:
+			currentline = line.split("#")
+			# end of video
+			if (isFirstLine is False and float(currentline[1]) == playtime[-1]): #TODO 
+				break;
+			timestamps.append(float(currentline[0]))
+			playtime.append(float(currentline[1]))
+			buffertime.append(float(currentline[2]))
+			avPlaytime.append(float(currentline[3][:-1]))
+			isFirstLine = False
+	return [timestamps , playtime, buffertime, avPlaytime]
+
+	
+def calculateBitrate(prefix, bitrates):
+	[timestamps, qualities, endtime] = getEvents(prefix)
+	timestamps.append(endtime)
+	periods = [x / 1000 for x in timestamps]
+	periods = np.diff(periods)
+	periods = np.round(periods)
+	periods = [int(i) for i in periods]
+		
+	usedBitrates = []	
+	
+	for x in range(0,len(qualities)):
+		index = [i for i, j in enumerate(bitrates) if qualities[x] in j]
+		currRate = float(bitrates[index[0]].split(":")[1])
+		usedBitrates.extend([currRate] * periods[x])
+		
+	avgBitrate = sum(usedBitrates)/len(usedBitrates)
+	maxBitrate = max(usedBitrates)
+	minBitrate = min(usedBitrates)
+	q25 = np.percentile(usedBitrates, 25)
+	q50 = np.percentile(usedBitrates, 50)
+	q75 = np.percentile(usedBitrates, 75)
+	q90 = np.percentile(usedBitrates, 90)
+	return str(avgBitrate) + "," + str(maxBitrate) + "," + str(minBitrate) + "," + str(q25) + "," + str(q50) + "," + str(q75) + "," + str(q90)
+
+def calculateBuffer(prefix):
+	[timestamps , playtime, buffertime, avPlaytime] = getBuffer(prefix)	
+	avgBuffer = sum(buffertime)/len(buffertime)
+	maxBuffer = max(buffertime)
+	minBuffer = min(buffertime)
+	q25 = np.percentile(buffertime, 25)
+	q50 = np.percentile(buffertime, 50)
+	q75 = np.percentile(buffertime, 75)
+	q90 = np.percentile(buffertime, 90)
+	return str(avgBuffer) + "," + str(maxBuffer) + "," + str(minBuffer) + "," + str(q25) + "," + str(q50) + "," + str(q75) + "," + str(q90) 
+
+def calculateStallings(prefix):
+	[timestamps , playtime, buffertime, avPlaytime] = getBuffer(prefix)
+	diffTimestamps = np.diff(timestamps)/1000
+	diffPlaytime = np.diff(playtime)
+
+	diffTimePlaytime = diffTimestamps - diffPlaytime
+	stallings = [0]
+	for i in diffTimePlaytime:
+		if (i > 0.5):
+			stallings.append(i)
+		
+	numOfStallings = len(stallings)
+	avgStalling = sum(stallings)/len(stallings)
+	maxStalling = max(stallings)
+	minStalling = min(stallings)
+	q25 = np.percentile(stallings, 25)
+	q50 = np.percentile(stallings, 50)
+	q75 = np.percentile(stallings, 75)
+	q90 = np.percentile(stallings, 90)
+	return str(numOfStallings) + "," + str(avgStalling) + "," + str(maxStalling) + "," + str(minStalling) + "," + str(q25) + "," + str(q50) + "," + str(q75) + "," + str(q90)
+
 
 
 # ----- MAIN
 
-#write output without buffering
+# # Write output without buffering
 # sys.stdout.flush()
 # sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
 
-#runTest()
-runBaselineVideo()
-#runRandomVideo()
+
+# # Try to get the experiment config as provided by the scheduler
+# try:
+#     with open(CONFIGFILE) as configfd:
+#         EXPCONFIG.update(json.load(configfd))
+# except Exception as e:
+#     print("Cannot retrive expconfig {}".format(e), "-- use defaulte settings")
+
+
+
+# Start Measurements
+runVideo()
